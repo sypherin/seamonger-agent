@@ -1,43 +1,72 @@
-# Seamonger Dummy-Proof Setup Guide
+# Seamonger: Headless Agent for Seafood Procurement
 
-This guide is for business owners, not developers.
-Follow each step top to bottom.
+Seamonger is a **headless Python agent** that works for you in the background.
+It watches Shopify orders, messages fishermen on WhatsApp, tracks responses, and keeps running without a UI.
 
-## Getting Started
+## What This Is (In Plain English)
+- It is a **Python background service**, not a click-around app.
+- You start it once and **keep it running**.
+- While it runs, it continuously monitors unfulfilled Shopify orders and handles supplier outreach.
 
-### 1) Get your Shopify API keys
-1. Log in to Shopify Admin.
-2. Go to `Settings` -> `Apps and sales channels`.
-3. Click `Develop apps`.
-4. Click `Create an app` and name it `Seamonger`.
-5. Open your new app, then go to `Configuration`.
-6. Add Admin API access for orders (read access is required).
-7. Click `Install app`.
-8. Copy these two values and keep them safe:
-   - `Admin API access token` -> this is your `SHOPIFY_ACCESS_TOKEN`
-   - Your store domain (looks like `your-store.myshopify.com`) -> this is `SHOPIFY_STORE_DOMAIN`
+## How It Runs
+Seamonger runs as a FastAPI app with an internal background loop.
 
-### 2) Link WhatsApp through OpenClaw
-1. Open your OpenClaw dashboard.
-2. Connect the WhatsApp number you use for supplier chats.
-3. In OpenClaw API settings, copy:
-   - Base/API URL -> this is `WHATSAPP_API_URL`
-   - API token -> this is `WHATSAPP_API_TOKEN`
-4. In OpenClaw webhook settings, set inbound webhook URL to:
-   - `http://YOUR_SERVER_IP:8000/webhooks/whatsapp`
-5. Save your OpenClaw settings.
+- API process: serves endpoints like `/health`, `/webhooks/whatsapp`, `/poll-now`.
+- Background worker: continuously polls Shopify for unfulfilled orders.
+- Requirement: if the process stops, monitoring and automation stop.
 
-## Setup
+This is why it should run under a process manager or on a server that stays online.
 
-### 1) Create your `.env` file
-In the project folder, run:
+## The Database (Fisherman Memory)
+Seamonger uses **SQLite** for memory.
+
+- SQLite is just a **local file** (default: `seamonger.db`).
+- You do **not** install a separate database server.
+- That file stores the agent's memory: fishermen profiles, reliability, and conversation-linked state.
+
+Think of it as the agent's notebook on disk.
+
+## OpenClaw Dependency (Current Transport)
+Right now, WhatsApp messaging is connected through the **OpenClaw Gateway**.
+
+- Seamonger sends and receives WhatsApp messages via OpenClaw API/webhooks.
+- To run this project as-is, OpenClaw must be available and configured.
+- If you want to run without OpenClaw, you need to replace the WhatsApp transport layer (`src/whatsapp.py`) with another provider.
+
+## Founder Experience (Founder Mirror)
+If `FOUNDER_PHONE` is set, Founder Mirror is enabled.
+
+- You receive real-time WhatsApp clones of supplier conversations.
+- You can observe all outreach without manually operating each chat.
+- You can intervene quickly (for example, sending `no` to halt active outreach flow).
+
+This gives founder-level visibility while the headless agent does the repetitive work.
+
+## Dummy-Proof Setup
+### 1) Install Python
+Install Python 3.11+ on your machine/server.
+
+Check it:
+
+```bash
+python --version
+```
+
+### 2) Install project dependencies
+From this project folder:
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3) Configure environment variables
+Create env file:
 
 ```bash
 cp .env.example .env
 ```
 
-### 2) Fill in the values
-Open `.env` and replace placeholders with real values:
+Edit `.env` and set at least:
 
 ```env
 SHOPIFY_STORE_DOMAIN=your-store.myshopify.com
@@ -54,64 +83,24 @@ FOUNDER_PHONE=+6599999999
 SQLITE_PATH=seamonger.db
 ```
 
-## Running
-
-Install dependencies first:
-
-```bash
-pip install -r requirements.txt
-```
-
-Start the app:
+### 4) Run the main service script
+Start the headless agent:
 
 ```bash
-uvicorn src.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 ```
 
-### Overseer Mode (you approve stuff)
-Use this mode when you want visibility and control.
+If it is running correctly:
 
-1. Set `FOUNDER_PHONE` to your WhatsApp number in `.env`.
-2. Start the app.
-3. The system mirrors inbound/outbound supplier messages to your phone.
-4. If you need an emergency stop, send `no` from your founder number.
+- `GET /health` returns `{"status":"ok"}`
+- The background loop keeps polling Shopify every interval
 
-### Full Auto Mode (hands-off)
-Use this mode when you want no owner intervention.
+## Minimal Daily Operations
+1. Keep the process running 24/7.
+2. Keep OpenClaw + Shopify credentials valid.
+3. Optionally call `POST /poll-now` for immediate checks.
+4. Watch Founder Mirror messages (if enabled) for full visibility.
 
-1. Leave `FOUNDER_PHONE` empty in `.env`:
-   - `FOUNDER_PHONE=`
-2. Start the app.
-3. The system runs without mirroring or founder override.
+---
 
-## How It Works (Simple)
-
-### Fisherman Memory
-The system keeps a memory of each fisherman:
-- What they usually supply.
-- How reliable they have been.
-
-This helps it choose the best supplier faster over time.
-
-### Founder Mirroring
-If `FOUNDER_PHONE` is set:
-- You receive copies of supplier conversations.
-- You stay in control without manually running every message.
-- You can send `no` to stop active outreach.
-
-## Quick Health Check
-After starting, open:
-
-- `http://YOUR_SERVER_IP:8000/health`
-
-You should see:
-
-```json
-{"status":"ok"}
-```
-
-## Daily Use
-1. Keep the app running.
-2. Add/update fishermen when needed (`POST /fishermen`).
-3. Let the system poll unfulfilled Shopify orders automatically.
-4. Optional: trigger immediate polling with `POST /poll-now`.
+If you only remember one thing: **Seamonger is a headless background worker. Keep it running, and it works for you.**
